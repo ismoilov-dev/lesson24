@@ -1,0 +1,9 @@
+# /etc/systemd/system/lesson24-cleanup.service — lesson24-cleanup.timer ishga tushiradi
+[Unit]
+Description=Lesson24: eskirgan bir martalik kodlarni o'chirish
+
+[Service]
+Type=oneshot
+User=lesson24
+WorkingDirectory=/srv/lesson24
+ExecStart=/srv/lesson24/venv/bin/python manage.py cleanup_codes

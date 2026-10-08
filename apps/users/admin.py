@@ -1,10 +1,12 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
-from .models import OneTimeCode, ParentLink, User
+from apps.admin_access import AdminRoleOnlyMixin
+
+from .models import OneTimeCode, ParentLink, TeacherProfile, User
 
 
-class ParentLinkInline(admin.TabularInline):
+class ParentLinkInline(AdminRoleOnlyMixin, admin.TabularInline):
     model = ParentLink
     fk_name = "student"
     extra = 0
@@ -12,8 +14,16 @@ class ParentLinkInline(admin.TabularInline):
     verbose_name_plural = "Ota-onalar"
 
 
+class TeacherProfileInline(AdminRoleOnlyMixin, admin.StackedInline):
+    model = TeacherProfile
+    extra = 0
+    max_num = 1
+    can_delete = False
+    verbose_name_plural = "Teacher profili"
+
+
 @admin.register(User)
-class UserAdmin(DjangoUserAdmin):
+class UserAdmin(AdminRoleOnlyMixin, DjangoUserAdmin):
     list_display = ["id", "__str__", "phone", "role", "telegram_id", "is_active", "date_joined"]
     list_filter = ["role", "is_active", "language"]
     search_fields = ["phone", "first_name", "last_name", "username", "telegram_id"]
@@ -28,11 +38,16 @@ class UserAdmin(DjangoUserAdmin):
     add_fieldsets = [
         (None, {"fields": ["username", "phone", "role", "password1", "password2"]}),
     ]
-    inlines = [ParentLinkInline]
+    inlines = [ParentLinkInline, TeacherProfileInline]
+
+    def get_readonly_fields(self, request, obj=None):
+        # superuser huquqini faqat superuser bera oladi
+        fields = super().get_readonly_fields(request, obj)
+        return fields if request.user.is_superuser else [*fields, "is_superuser"]
 
 
 @admin.register(ParentLink)
-class ParentLinkAdmin(admin.ModelAdmin):
+class ParentLinkAdmin(AdminRoleOnlyMixin, admin.ModelAdmin):
     list_display = ["id", "parent", "student", "created_at"]
     search_fields = ["parent__phone", "student__phone", "parent__first_name", "student__first_name"]
     autocomplete_fields = ["parent", "student"]
@@ -40,7 +55,7 @@ class ParentLinkAdmin(admin.ModelAdmin):
 
 
 @admin.register(OneTimeCode)
-class OneTimeCodeAdmin(admin.ModelAdmin):
+class OneTimeCodeAdmin(AdminRoleOnlyMixin, admin.ModelAdmin):
     """Faqat ko'rish uchun (nosozliklarni tekshirish). Kod qiymati ko'rsatilmaydi."""
 
     list_display = ["id", "user", "purpose", "created_at", "expires_at", "used_at", "attempts"]

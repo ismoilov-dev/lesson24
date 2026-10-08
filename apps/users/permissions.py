@@ -5,7 +5,7 @@
 
 from rest_framework.permissions import BasePermission
 
-from .models import ParentLink, User
+from .models import User
 
 
 class _RolePermission(BasePermission):
@@ -38,10 +38,3 @@ class IsAdminRole(BasePermission):
     def has_permission(self, request, view) -> bool:
         user = request.user
         return bool(user and user.is_authenticated and user.is_admin_role)
-
-
-class IsParentOfStudent(IsParent):
-    """Object-level: `obj` is a student linked to the requesting parent."""
-
-    def has_object_permission(self, request, view, obj: User) -> bool:
-        return ParentLink.objects.filter(parent=request.user, student=obj).exists()

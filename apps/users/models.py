@@ -18,9 +18,11 @@ class User(AbstractUser):
         RU = "ru", "Русский"
         EN = "en", "English"
 
-    STAFF_ROLES = frozenset({Role.TEACHER, Role.ADMIN})
+    STAFF_ROLES = frozenset({Role.ADMIN})
 
-    role = models.CharField(max_length=10, choices=Role.choices, default=Role.STUDENT, db_index=True)
+    role = models.CharField(
+        max_length=10, choices=Role.choices, default=Role.STUDENT, db_index=True
+    )
     telegram_id = models.BigIntegerField(unique=True, null=True, blank=True)
     # "" = telefon yo'q (masalan, createsuperuser); unikallik faqat bo'sh bo'lmaganlar uchun
     phone = models.CharField(max_length=16, blank=True, default="")
@@ -37,7 +39,7 @@ class User(AbstractUser):
         return self.get_full_name() or self.phone or self.username
 
     def save(self, *args, **kwargs) -> None:
-        # Teacher/admin Django Admin'ga kira oladi; rol pasaytirilsa — kirish ham olinadi.
+        # Admin Django Admin'ga kira oladi; rol pasaytirilsa — kirish ham olinadi.
         self.is_staff = self.is_superuser or self.role in self.STAFF_ROLES
         update_fields = kwargs.get("update_fields")
         if update_fields is not None and "role" in update_fields:
@@ -62,14 +64,14 @@ class User(AbstractUser):
 
 
 class OneTimeCode(models.Model):
-    """Bir martalik kod: login (6 raqam, 5 daqiqa) va ota-ona taklifi (8 belgi, 24 soat)."""
+    """Bir martalik kod: login (6 raqam, 10 daqiqa) va ota-ona taklifi (8 belgi, 24 soat)."""
 
     class Purpose(models.TextChoices):
         LOGIN = "login", "Login"
         PARENT_LINK = "parent_link", "Ota-ona taklifi"
 
     TTL = {
-        Purpose.LOGIN: timedelta(minutes=5),
+        Purpose.LOGIN: timedelta(minutes=10),
         Purpose.PARENT_LINK: timedelta(hours=24),
     }
     MAX_ATTEMPTS = 5
@@ -114,3 +116,17 @@ class ParentLink(models.Model):
 
     def __str__(self) -> str:
         return f"{self.parent} → {self.student}"
+
+
+class TeacherProfile(models.Model):
+    """O'qituvchining ommaviy profili (kurs sahifasida ko'rinadi). Keyin kengaytiriladi."""
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="teacher_profile")
+    specialization = models.CharField("Mutaxassislik", max_length=200, blank=True)
+    bio = models.TextField(blank=True)
+    # Rasm ImgBB'da; bu yerda faqat URL
+    photo_url = models.URLField(max_length=500, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return f"Profil: {self.user}"

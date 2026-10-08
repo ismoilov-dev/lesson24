@@ -1,0 +1,15 @@
+# /etc/systemd/system/lesson24-bot.service
+[Unit]
+Description=Lesson24 Telegram bot (aiogram polling)
+After=network.target postgresql.service
+
+[Service]
+User=lesson24
+Group=www-data
+WorkingDirectory=/srv/lesson24
+ExecStart=/srv/lesson24/venv/bin/python bot/main.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

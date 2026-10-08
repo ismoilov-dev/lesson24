@@ -41,7 +41,7 @@ def get_or_create_bot_user(
 ) -> tuple[User, bool]:
     """Find a user by Telegram ID or phone, or create one with `role`.
 
-    A user pre-registered by an admin (phone only, e.g. a teacher) gets the Telegram ID attached
+    A user pre-registered by an admin (phone only, e.g. a new admin) gets the Telegram ID attached
     and keeps their role.
     """
     phone = normalize_phone(phone)
@@ -74,9 +74,7 @@ def get_or_create_bot_user(
         changed.append("telegram_id")
     if user.phone != phone:
         if User.objects.filter(phone=phone).exclude(pk=user.pk).exists():
-            raise ServiceError(
-                "Bu telefon raqam boshqa akkauntga bog'langan.", code="phone_taken"
-            )
+            raise ServiceError("Bu telefon raqam boshqa akkauntga bog'langan.", code="phone_taken")
         user.phone = phone
         changed.append("phone")
     for field, value in (("first_name", first_name), ("last_name", last_name)):
@@ -183,8 +181,58 @@ def accept_parent_invite(parent: User, code: str) -> ParentLink:
     return link
 
 
+def get_bot_user(telegram_id: int) -> User | None:
+    return User.objects.filter(telegram_id=telegram_id).first()
+
+
+@transaction.atomic
+def issue_bot_login(user: User, invite_code: str | None = None) -> tuple[OneTimeCode, User | None]:
+    """Login code for a bot user; with `invite_code` the user (a parent) is linked first.
+
+    Returns `(login_code, linked_student_or_None)`.
+    """
+    if not user.is_active:
+        raise ServiceError("Akkauntingiz bloklangan.", code="blocked", status=403)
+    student = None
+    if invite_code:
+        if not user.is_parent:
+            raise ServiceError(
+                "Bu havola ota-onalar uchun. Siz boshqa rol bilan ro'yxatdan o'tgansiz.",
+                code="not_parent",
+                status=403,
+            )
+        student = accept_parent_invite(user, invite_code).student
+    return issue_code(user, OneTimeCode.Purpose.LOGIN), student
+
+
+@transaction.atomic
+def register_from_contact(
+    *,
+    telegram_id: int,
+    phone: str,
+    first_name: str = "",
+    last_name: str = "",
+    invite_code: str | None = None,
+) -> tuple[User, OneTimeCode, User | None]:
+    """Bot contact handler: find/create the user (parent if invited) and issue a login code.
+
+    One transaction: an invalid invite does not leave a half-created parent behind.
+    """
+    role = User.Role.PARENT if invite_code else User.Role.STUDENT
+    user, _ = get_or_create_bot_user(
+        telegram_id=telegram_id,
+        phone=phone,
+        first_name=first_name,
+        last_name=last_name,
+        role=role,
+    )
+    otc, student = issue_bot_login(user, invite_code)
+    return user, otc, student
+
+
 def cleanup_codes() -> int:
     """Delete codes that expired or were used more than a day ago. Returns deleted count."""
     cutoff = timezone.now() - OneTimeCode.TTL[OneTimeCode.Purpose.PARENT_LINK]
-    deleted, _ = OneTimeCode.objects.filter(Q(expires_at__lt=cutoff) | Q(used_at__lt=cutoff)).delete()
+    stale = Q(expires_at__lt=cutoff) | Q(used_at__lt=cutoff)
+    deleted, _ = OneTimeCode.objects.filter(stale).delete()
     return deleted

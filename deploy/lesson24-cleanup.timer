@@ -1,0 +1,10 @@
+# /etc/systemd/system/lesson24-cleanup.timer
+[Unit]
+Description=Lesson24: kodlarni kuniga bir marta tozalash
+
+[Timer]
+OnCalendar=*-*-* 04:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
