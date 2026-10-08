@@ -1,0 +1,21 @@
+# /etc/systemd/system/lesson24-web.service
+[Unit]
+Description=Lesson24 API (gunicorn)
+After=network.target postgresql.service
+
+[Service]
+User=lesson24
+Group=www-data
+WorkingDirectory=/srv/lesson24
+# --max-requests: worker'lar vaqti-vaqti bilan yangilanadi (xotira sizib ketmasin)
+ExecStart=/srv/lesson24/venv/bin/gunicorn config.wsgi:application \
+    --bind 127.0.0.1:8000 \
+    --workers 3 \
+    --timeout 60 \
+    --max-requests 1000 --max-requests-jitter 100 \
+    --access-logfile - --error-logfile -
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

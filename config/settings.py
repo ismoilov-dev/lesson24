@@ -91,7 +91,19 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 # Nginx `internal` location: himoyalangan fayllar (to'lov cheklari) X-Accel-Redirect orqali beriladi
 PROTECTED_MEDIA_URL = "/protected-media/"
+USE_X_ACCEL_REDIRECT = env.bool("USE_X_ACCEL_REDIRECT", default=not DEBUG)
 DATA_UPLOAD_MAX_MEMORY_SIZE = 6 * 1024 * 1024
+PAYMENT_SCREENSHOT_MAX_BYTES = 5 * 1024 * 1024
+COURSE_COVER_MAX_BYTES = 5 * 1024 * 1024
+
+# Redis'siz: throttling hisoblagichlari barcha gunicorn worker'lar uchun umumiy bo'lishi kerak
+# (LocMem har worker'da alohida). Jadval: `python manage.py createcachetable`.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "LOCATION": "django_cache",
+    }
+}
 
 # --- DRF / JWT / docs -------------------------------------------------------
 REST_FRAMEWORK = {
@@ -99,9 +111,13 @@ REST_FRAMEWORK = {
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
+    # Faqat JSON; fayl yuklash (multipart) — faqat kurs muqovasi va to'lov cheki view'larida
+    "DEFAULT_PARSER_CLASSES": ["rest_framework.parsers.JSONParser"],
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,
     "DEFAULT_THROTTLE_RATES": {"auth_verify": "5/min"},
+    # Nginx ortida 1: throttling haqiqiy IP (X-Forwarded-For) bo'yicha ishlaydi
+    "NUM_PROXIES": env.int("NUM_PROXIES", default=0),
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "EXCEPTION_HANDLER": "apps.errors.exception_handler",
 }
@@ -118,6 +134,18 @@ SPECTACULAR_SETTINGS = {
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
     "SCHEMA_PATH_PREFIX": r"/api/v1",
+    # Swagger'da panel bo'yicha tartib; frontend panelni GET /api/v1/me/ → role orqali tanlaydi
+    "TAGS": [
+        {"name": "auth", "description": "Hamma: Telegram kodi → JWT"},
+        {"name": "me", "description": "Kirgan foydalanuvchi: profil, kurslarim, sertifikatlarim"},
+        {"name": "courses", "description": "Ommaviy: katalog"},
+        {"name": "lessons", "description": "Student: dars, video, test"},
+        {"name": "orders", "description": "Student / ota-ona: to'lov va buyurtmalar"},
+        {"name": "parents", "description": "Ota-ona: farzandlar va progress"},
+        {"name": "certificates", "description": "Ommaviy: sertifikatni tekshirish"},
+        {"name": "teacher", "description": "O'qituvchi paneli: o'z kurslari, profil"},
+        {"name": "admin", "description": "Admin paneli"},
+    ],
 }
 
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
@@ -126,10 +154,17 @@ CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
 TELEGRAM_BOT_TOKEN = env("TELEGRAM_BOT_TOKEN", default="")
 TELEGRAM_BOT_USERNAME = env("TELEGRAM_BOT_USERNAME", default="").lstrip("@")
 TELEGRAM_ADMIN_CHAT_ID = env("TELEGRAM_ADMIN_CHAT_ID", default="")
+# True — xabarlar fon thread'isiz, darhol yuboriladi (testlar uchun)
+TELEGRAM_NOTIFY_SYNC = env.bool("TELEGRAM_NOTIFY_SYNC", default=False)
 
 PAYMENT_CARD_NUMBER = env("PAYMENT_CARD_NUMBER", default="")
 PAYMENT_CARD_HOLDER = env("PAYMENT_CARD_HOLDER", default="")
 
+# Kurs muqovalari ImgBB'ga yuklanadi (ommaviy rasm xostingi); .env da IMGBB_API_KEY (yoki IMGBB)
+IMGBB_API_KEY = env("IMGBB_API_KEY", default="") or env("IMGBB", default="")
+
+# drive — Google Drive embed (iframe); bunny — Bunny Stream imzolangan HLS
+VIDEO_PROVIDER = env("VIDEO_PROVIDER", default="drive")
 VIDEO_PROVIDER_API_KEY = env("VIDEO_PROVIDER_API_KEY", default="")
 VIDEO_SIGNING_KEY = env("VIDEO_SIGNING_KEY", default="")
 VIDEO_CDN_HOSTNAME = env("VIDEO_CDN_HOSTNAME", default="")
@@ -154,4 +189,6 @@ LOGGING = {
     "disable_existing_loggers": False,
     "handlers": {"console": {"class": "logging.StreamHandler"}},
     "root": {"handlers": ["console"], "level": "INFO"},
+    # httpx so'rov URL'ini log qiladi — Telegram Bot API URL'ida token bor
+    "loggers": {"httpx": {"level": "WARNING"}, "httpcore": {"level": "WARNING"}},
 }
